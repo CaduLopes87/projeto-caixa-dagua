@@ -18,8 +18,8 @@ EnergyMonitor SCT013;
 //===============================================
 // Your WiFi credentials.
 // Set password to "" for open networks.
-char ssid[] = "CEUNET - Bezerra_2G";
-char pass[] = "A24b27*9";
+char ssid[] = "ssid";
+char pass[] = "pass";
 
 BlynkTimer timer;
 //===============================================
