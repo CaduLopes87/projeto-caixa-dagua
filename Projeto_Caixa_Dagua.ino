@@ -9,17 +9,18 @@
 //===============================================
 //Inclusão de Bibliotecas
 
-#include "Ultrasonic.h"
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
+#include <liquidCrystal.h>
+#include "Ultrasonic.h"
 #include "EmonLib.h"
 EnergyMonitor SCT013;
 
 //===============================================
 // Your WiFi credentials.
 // Set password to "" for open networks.
-char ssid[] = "ssid";
-char pass[] = "pass";
+char ssid[] = "CEUNET - Bezerra_2G";
+char pass[] = "A24b27*9";
 
 BlynkTimer timer;
 //===============================================
@@ -27,15 +28,15 @@ BlynkTimer timer;
 //Mapeamento de hardware
 #define led1 D5
 
-#define S1 D6
-#define S2 D7
-#define S3 D8 //Pinos de seleção do multiplexador
+#define S1 D4
+#define S2 D5
+#define S3 D6 //Pinos de seleção do multiplexador
 
 // int pinSCT = A0;   //Pino analógico conectado ao SCT-013
 int portaSensores = A0; //Pino de entrada do multiplexador
-#define Sensor_Tensao D4 //Pino analógico conectado ao Sensor de Tensão
+int pinSCT = A0;
 
-
+// #define Sensor_Tensao A0 //Pino analógico conectado ao Sensor de Tensão
 
 const int echoPin = D3; //PINO DIGITAL UTILIZADO PELO HC-SR04 ECHO(RECEBE)
 const int trigPin = D4; //PINO DIGITAL UTILIZADO PELO HC-SR04 TRIG(ENVIA)
@@ -88,7 +89,7 @@ void setup()
 {
   //Definindo portas
   pinMode(led1, OUTPUT);
-  // SCT013.current(pinSCT, 6.0606); //Reajusta a corrente máxima do sensor para 10A 
+  SCT013.current(pinSCT, 6.0606); //Reajusta a corrente máxima do sensor para 10A 
   // pinMode(Sensor_Tensao, INPUT);
   pinMode(portaSensores, INPUT);
 
@@ -115,21 +116,21 @@ void loop()
   //========================================================
   //Funcionamento do Sensor de Corrente
 
-  int pinSCT = portaSensores;
-  SCT013.current(pinSCT, 6.0606); //Reajusta a corrente máxima do sensor para 10A 
-
-  ativarSensor("pinSCT");
+  ativarSensor(1);
   Irms = SCT013.calcIrms(1480);  // Calcula o valor da Corrente 1172
 
   potencia = Irms * tensao;  // Calcula o valor da Potencia Instantanea
 
   //========================================================
   //Funcionamento do Sensor de Tensão
-  ativarSensor("Sensor-tensao");
+  ativarSensor(2);
 
-  int Valor_Tensao_Lido = analogRead(Sensor_Tensao);
+  int Valor_Tensao_Lido = analogRead(portaSensores);
+  if(Valor_Tensao_Lido != 0){
+    Valor_Tensao_Lido -= 110;
+  }
   tensaoMedida = (Valor_Tensao_Lido * 25) / 1023.0;
-  Serial.println(analogRead(Sensor_Tensao));
+  Serial.println(analogRead(portaSensores));
 
   //Impressão dos resultados no monitor Serial
   Serial.print("Corrente = ");
@@ -169,20 +170,20 @@ void hcsr04(){
     delay(500);
  }
 
- void ativarSensor(sensor) {
+ void ativarSensor(int sensor) {
   //Função para ativar a porta do multiplexador que será lida
-  if(sensor == "pinSCT"){
-    serial.println("Lendo o sensor de corrente.");
+  if(sensor == 1){
+    Serial.println("Lendo o sensor de corrente.");
     //Ativa o pino 1 (2Y1)
-    digital.Write(S1, LOW);
-    digital.Write(S2, HIGH);
-    digital.Write(S3, LOW);
-  }else if(sensor == "Sensor_tensao"){
-    serial.println("Lendo o sensor de tensão.");
+    digitalWrite(S1, LOW);
+    digitalWrite(S2, HIGH);
+    digitalWrite(S3, LOW);
+  }else if(sensor == 2){
+    Serial.println("Lendo o sensor de tensão.");
     //Ativa o pino 2 (2Y0) 
-    digital.Write(S1, LOW);
-    digital.Write(S2, LOW);
-    digital.Write(S3, LOW);
+    digitalWrite(S1, LOW);
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, LOW);
   }
   delay(30); //intervalo de 30ms para troca da porta 
  }
