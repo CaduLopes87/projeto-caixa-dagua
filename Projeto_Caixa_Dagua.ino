@@ -127,10 +127,16 @@ void loop()
 
   int Valor_Tensao_Lido = analogRead(portaSensores);
   if(Valor_Tensao_Lido != 0){
-    Valor_Tensao_Lido -= 110;
+    Valor_Tensao_Lido -= 110; //calibração do sensor de tensão
   }
   tensaoMedida = (Valor_Tensao_Lido * 25) / 1023.0;
   Serial.println(analogRead(portaSensores));
+
+  //Tratamento dos dados para acionar a bomba
+
+  if(Irms < 2 && tensaoMedida > 4) {
+    digitalWrite(led1, HIGH);
+  }
 
   //Impressão dos resultados no monitor Serial
   Serial.print("Corrente = ");
