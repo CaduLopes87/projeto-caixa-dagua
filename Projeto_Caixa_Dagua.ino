@@ -11,7 +11,7 @@
 
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
-#include <liquidCrystal.h>
+// #include <liquidCrystal.h>
 #include "Ultrasonic.h"
 #include "EmonLib.h"
 EnergyMonitor SCT013;
@@ -26,11 +26,11 @@ BlynkTimer timer;
 //===============================================
 
 //Mapeamento de hardware
-#define led1 D5
+#define led1 D6
 
-#define S1 D4
+// #define S0 D4
 #define S2 D5
-#define S3 D6 //Pinos de seleção do multiplexador
+// #define S2 D6 //Pinos de seleção do multiplexador
 
 // int pinSCT = A0;   //Pino analógico conectado ao SCT-013
 int portaSensores = A0; //Pino de entrada do multiplexador
@@ -117,6 +117,7 @@ void loop()
   //Funcionamento do Sensor de Corrente
 
   ativarSensor(1);
+
   Irms = SCT013.calcIrms(1480);  // Calcula o valor da Corrente 1172
 
   potencia = Irms * tensao;  // Calcula o valor da Potencia Instantanea
@@ -124,7 +125,7 @@ void loop()
   //========================================================
   //Funcionamento do Sensor de Tensão
   ativarSensor(2);
-
+  
   int Valor_Tensao_Lido = analogRead(portaSensores);
   if(Valor_Tensao_Lido != 0){
     Valor_Tensao_Lido -= 110; //calibração do sensor de tensão
@@ -132,12 +133,16 @@ void loop()
   tensaoMedida = (Valor_Tensao_Lido * 25) / 1023.0;
   Serial.println(analogRead(portaSensores));
 
+  //========================================================
   //Tratamento dos dados para acionar a bomba
 
-  if(Irms < 2 && tensaoMedida > 4) {
+  if(Irms > 4 && Irms < 5 && tensaoMedida > 4) {
     digitalWrite(led1, HIGH);
+  }else {
+    digitalWrite(led1, LOW);
   }
 
+  //========================================================
   //Impressão dos resultados no monitor Serial
   Serial.print("Corrente = ");
   Serial.print(Irms);
@@ -180,18 +185,12 @@ void hcsr04(){
   //Função para ativar a porta do multiplexador que será lida
   if(sensor == 1){
     Serial.println("Lendo o sensor de corrente.");
-    //Ativa o pino 1 (2Y1)
-    digitalWrite(S1, LOW);
-    digitalWrite(S2, HIGH);
-    digitalWrite(S3, LOW);
+    //Ativa o pino 1 (2Y1 ou C1)
+    analogWrite(S2, 255);
   }else if(sensor == 2){
     Serial.println("Lendo o sensor de tensão.");
-    //Ativa o pino 2 (2Y0) 
-    digitalWrite(S1, LOW);
-    digitalWrite(S2, LOW);
-    digitalWrite(S3, LOW);
+    //Ativa o pino 2 (2Y0 ou C0)
+    analogWrite(S2, 0);
   }
   delay(30); //intervalo de 30ms para troca da porta 
  }
-
-
