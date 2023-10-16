@@ -26,10 +26,10 @@ BlynkTimer timer;
 //===============================================
 
 //Mapeamento de hardware
-#define led1 D6
+#define relay_Pin D2
 
 // #define S0 D4
-#define S2 D5
+#define S2 D1
 // #define S2 D6 //Pinos de seleção do multiplexador
 
 // int pinSCT = A0;   //Pino analógico conectado ao SCT-013
@@ -38,8 +38,8 @@ int pinSCT = A0;
 
 // #define Sensor_Tensao A0 //Pino analógico conectado ao Sensor de Tensão
 
-const int echoPin = D3; //PINO DIGITAL UTILIZADO PELO HC-SR04 ECHO(RECEBE)
-const int trigPin = D4; //PINO DIGITAL UTILIZADO PELO HC-SR04 TRIG(ENVIA)
+const int echoPin = D4; //PINO DIGITAL UTILIZADO PELO HC-SR04 ECHO(RECEBE)
+const int trigPin = D3; //PINO DIGITAL UTILIZADO PELO HC-SR04 TRIG(ENVIA)
 Ultrasonic ultrasonic(trigPin,echoPin); //INICIALIZANDO OS PINOS DO ARDUINO
 
 //===============================================
@@ -57,6 +57,9 @@ float tensaoMedida = 0;
 int distancia; 
 String result; 
 
+//Controle do Blynk
+  int selecao_value = 0;
+
 //===============================================
 //Funções de controle do Blynk
 BLYNK_WRITE(V5)
@@ -64,7 +67,21 @@ BLYNK_WRITE(V5)
   //get value from Blynk
   int value = param.asInt();
   // Update state
-  digitalWrite(led1, value);
+  digitalWrite(relay_Pin, value);
+
+  if(value == 1){
+    Blynk.virtualWrite(V6, 1); //Troca o acionamento da bomba para manual
+  }
+}
+
+BLYNK_WRITE(V6)
+{
+  //get value from Blynk
+  selecao_value = param.asInt();
+  // Update state
+  if(selecao_value == 0){
+    Blynk.virtualWrite(V5, 0);
+  }
 }
 
 
@@ -88,7 +105,7 @@ void myTimerEvent()
 void setup()
 {
   //Definindo portas
-  pinMode(led1, OUTPUT);
+  pinMode(relay_Pin, OUTPUT);
   SCT013.current(pinSCT, 6.0606); //Reajusta a corrente máxima do sensor para 10A 
   // pinMode(Sensor_Tensao, INPUT);
   pinMode(portaSensores, INPUT);
@@ -127,19 +144,28 @@ void loop()
   ativarSensor(2);
   
   int Valor_Tensao_Lido = analogRead(portaSensores);
-  if(Valor_Tensao_Lido != 0){
-    Valor_Tensao_Lido -= 110; //calibração do sensor de tensão
-  }
-  tensaoMedida = (Valor_Tensao_Lido * 25) / 1023.0;
+  // if(Valor_Tensao_Lido != 0){
+  //   Valor_Tensao_Lido -= 110; //calibração do sensor de tensão
+  // }
+  tensaoMedida = (Valor_Tensao_Lido * 220) / 1023.0;
   Serial.println(analogRead(portaSensores));
+
+  //========================================================
+  //Código para funcionamento do Ultrassom
+  hcsr04();
+  Serial.print("Distancia: ");
+  Serial.print(result);
+  Serial.print(distancia);
+  Serial.println("cm");
+  Blynk.virtualWrite(V0, result); //Envia a distância para o aplicativo blynk
 
   //========================================================
   //Tratamento dos dados para acionar a bomba
 
-  if(Irms > 4 && Irms < 5 && tensaoMedida > 4) {
-    digitalWrite(led1, HIGH);
-  }else {
-    digitalWrite(led1, LOW);
+  if(distancia >= 50 && selecao_value == 0 && Irms > 3 && Irms < 5 && tensaoMedida > 200){
+    digitalWrite(relay_Pin, HIGH);
+  } else {
+    digitalWrite(relay_Pin, LOW);
   }
 
   //========================================================
@@ -157,13 +183,6 @@ void loop()
   Serial.println(" V");
   Blynk.virtualWrite(V2, tensaoMedida); //Envia a tensão para o aplicativo blynk
 
-  //========================================================
-  //Código para funcionamento do Ultrassom
-  hcsr04();
-  Serial.print("Distancia: ");
-  Serial.print(result);
-  Serial.println("cm");
-  Blynk.virtualWrite(V0, result); //Envia a distância para o aplicativo blynk
 }
 
 //Função para calcular a distância com ultrassom 

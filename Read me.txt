@@ -3,7 +3,7 @@ Link de instalação da placa ESP8266:
 
 Links para as bibliotecas: 
 
-  Blynk => Digite "blynk" na aba de bibliotecas da IDE e selecione o primeira, criada por 'Volodymyr Shymanskyy'
+  Blynk => Digite "blynk" na aba de bibliotecas da IDE e selecione a primeira, criada por 'Volodymyr Shymanskyy'
 
   Ultrassonic.h => https://blogmasterwalkershop.com.br/arquivos/libs/Ultrasonic.zip
 
