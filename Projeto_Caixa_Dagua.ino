@@ -19,8 +19,8 @@ EnergyMonitor SCT013;
 //===============================================
 // Your WiFi credentials.
 // Set password to "" for open networks.
-char ssid[] = "CEUNET - Bezerra_2G";
-char pass[] = "A24b27*9";
+char ssid[] = "Wemos";
+char pass[] = "123456789";
 
 BlynkTimer timer;
 //===============================================
@@ -50,40 +50,53 @@ int tensao = 220;
 int potencia;
 double Irms = 0;
 
+//controle da corrente da bomba
+int correnteMinima = 2;
+int correnteMaxima = 3;
+
 //Sensor de Tensão
 float tensaoMedida = 0;
+
+//controle da Tensão da Rede
+int tensaoMinima = 200;
 
 //Sensor Ultrassom
 int distancia; 
 String result; 
 
 //Controle do Blynk
-  int selecao_value = 0;
+int selecaoValue = 0;
 
+//Controle de falha da bomba
+int falhaBomba = 0; 
+unsigned long inicioTempoFalha = 0;
+unsigned long intervalo = 10000; //10s
 //===============================================
 //Funções de controle do Blynk
+
+BLYNK_WRITE(V6)
+{
+  //get value from Blynk
+  selecaoValue = param.asInt();
+  // Update state
+  if(selecaoValue == 0){
+    Blynk.virtualWrite(V5, 0);
+  }
+}
+
 BLYNK_WRITE(V5)
 {
   //get value from Blynk
   int value = param.asInt();
   // Update state
-  digitalWrite(relay_Pin, value);
+  if(selecaoValue == 1){
+    digitalWrite(relay_Pin, value);
+  }
 
   if(value == 1){
     Blynk.virtualWrite(V6, 1); //Troca o acionamento da bomba para manual
   }
 }
-
-BLYNK_WRITE(V6)
-{
-  //get value from Blynk
-  selecao_value = param.asInt();
-  // Update state
-  if(selecao_value == 0){
-    Blynk.virtualWrite(V5, 0);
-  }
-}
-
 
 // This function is called every time the device is connected to the Blynk.Cloud
 BLYNK_CONNECTED()
@@ -106,6 +119,8 @@ void setup()
 {
   //Definindo portas
   pinMode(relay_Pin, OUTPUT);
+  digitalWrite(relay_Pin, LOW);
+
   SCT013.current(pinSCT, 6.0606); //Reajusta a corrente máxima do sensor para 10A 
   // pinMode(Sensor_Tensao, INPUT);
   pinMode(portaSensores, INPUT);
@@ -155,17 +170,34 @@ void loop()
   hcsr04();
   Serial.print("Distancia: ");
   Serial.print(result);
-  Serial.print(distancia);
   Serial.println("cm");
   Blynk.virtualWrite(V0, result); //Envia a distância para o aplicativo blynk
 
   //========================================================
   //Tratamento dos dados para acionar a bomba
 
-  if(distancia >= 50 && selecao_value == 0 && Irms > 3 && Irms < 5 && tensaoMedida > 200){
-    digitalWrite(relay_Pin, HIGH);
+  if(selecaoValue == 0){
+    if(distancia >= 50 && Irms == 0 && falhaBomba == 0){
+      digitalWrite(relay_Pin, HIGH);
+    } else if(Irms < correnteMinima || Irms > correnteMaxima || tensaoMedida < tensaoMinima){
+      digitalWrite(relay_Pin, LOW);
+      falhaBomba = 1; //ocorreu a falha
+      inicioTempoFalha = millis();
+    }
+  }
+
+  if(falhaBomba == 1) {
+    unsigned long tempoAtual = millis();
+    unsigned long diferencaTempo = tempoAtual - inicioTempoFalha;
+
+    if(diferencaTempo >= intervalo) {
+      falhaBomba = 0;
+    }
+  }
+  if(falhaBomba == 0){
+    Serial.println("Bomba OK!");
   } else {
-    digitalWrite(relay_Pin, LOW);
+    Serial.println("Falha na bomba...");
   }
 
   //========================================================
