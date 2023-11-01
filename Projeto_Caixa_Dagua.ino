@@ -12,13 +12,11 @@
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 // #include <liquidCrystal.h>
-#include "Ultrasonic.h"
 #include "EmonLib.h"
 EnergyMonitor SCT013;
 
 //===============================================
-// Your WiFi credentials.
-// Set password to "" for open networks.
+// Dados do WiFi
 char ssid[] = "Wemos";
 char pass[] = "123456789";
 
@@ -35,12 +33,6 @@ BlynkTimer timer;
 // int pinSCT = A0;   //Pino analógico conectado ao SCT-013
 int portaSensores = A0; //Pino de entrada do multiplexador
 int pinSCT = A0;
-
-// #define Sensor_Tensao A0 //Pino analógico conectado ao Sensor de Tensão
-
-const int echoPin = D4; //PINO DIGITAL UTILIZADO PELO HC-SR04 ECHO(RECEBE)
-const int trigPin = D3; //PINO DIGITAL UTILIZADO PELO HC-SR04 TRIG(ENVIA)
-Ultrasonic ultrasonic(trigPin,echoPin); //INICIALIZANDO OS PINOS DO ARDUINO
 
 //===============================================
 //Definição de Variáveis
@@ -60,10 +52,6 @@ float tensaoMedida = 0;
 //controle da Tensão da Rede
 int tensaoMinima = 200;
 
-//Sensor Ultrassom
-int distancia; 
-String result; 
-
 //Controle do Blynk
 int selecaoValue = 0;
 
@@ -76,9 +64,9 @@ unsigned long intervalo = 10000; //10s
 
 BLYNK_WRITE(V6)
 {
-  //get value from Blynk
+  //recebe o valor do blynk
   selecaoValue = param.asInt();
-  // Update state
+  // Atualiza o estado do V5
   if(selecaoValue == 0){
     Blynk.virtualWrite(V5, 0);
   }
@@ -86,19 +74,21 @@ BLYNK_WRITE(V6)
 
 BLYNK_WRITE(V5)
 {
-  //get value from Blynk
+  //recebe o valor do blynk
   int value = param.asInt();
-  // Update state
+  // Atualiza o estado do V6
+  if(value == 1){
+    Blynk.virtualWrite(V6, 1); //Troca o acionamento da bomba para manual
+  }
+  //aciona o relé se a seleção estiver em manual (1)
   if(selecaoValue == 1){
     digitalWrite(relay_Pin, value);
   }
 
-  if(value == 1){
-    Blynk.virtualWrite(V6, 1); //Troca o acionamento da bomba para manual
-  }
 }
 
 // This function is called every time the device is connected to the Blynk.Cloud
+//função chamada sempre que o dispositivo estiver conectado ao Blynk.Cloud  
 BLYNK_CONNECTED()
 {
   // Change Web Link Button message to "Congratulations!"
@@ -125,16 +115,10 @@ void setup()
   // pinMode(Sensor_Tensao, INPUT);
   pinMode(portaSensores, INPUT);
 
-  pinMode(echoPin, INPUT); //DEFINE O PINO COMO ENTRADA (RECEBE)
-  pinMode(trigPin, OUTPUT); //DEFINE O PINO COMO SAIDA (ENVIA)
-
   // Debug console
   Serial.begin(115200);
 
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-  // You can also specify server:
-  //Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, "blynk.cloud", 80);
-  //Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, IPAddress(192,168,1,100), 8080);
 
   // Setup a function to be called every second
   timer.setInterval(1000L, myTimerEvent);
@@ -159,25 +143,15 @@ void loop()
   ativarSensor(2);
   
   int Valor_Tensao_Lido = analogRead(portaSensores);
-  // if(Valor_Tensao_Lido != 0){
-  //   Valor_Tensao_Lido -= 110; //calibração do sensor de tensão
-  // }
+
   tensaoMedida = (Valor_Tensao_Lido * 220) / 1023.0;
   Serial.println(analogRead(portaSensores));
-
-  //========================================================
-  //Código para funcionamento do Ultrassom
-  hcsr04();
-  Serial.print("Distancia: ");
-  Serial.print(result);
-  Serial.println("cm");
-  Blynk.virtualWrite(V0, result); //Envia a distância para o aplicativo blynk
 
   //========================================================
   //Tratamento dos dados para acionar a bomba
 
   if(selecaoValue == 0){
-    if(distancia >= 50 && Irms == 0 && falhaBomba == 0){
+    if(Irms == 0 && falhaBomba == 0){
       digitalWrite(relay_Pin, HIGH);
     } else if(Irms < correnteMinima || Irms > correnteMaxima || tensaoMedida < tensaoMinima){
       digitalWrite(relay_Pin, LOW);
@@ -216,21 +190,6 @@ void loop()
   Blynk.virtualWrite(V2, tensaoMedida); //Envia a tensão para o aplicativo blynk
 
 }
-
-//Função para calcular a distância com ultrassom 
-void hcsr04(){
-    digitalWrite(trigPin, LOW); 
-    delayMicroseconds(2);
-    digitalWrite(trigPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(trigPin, LOW);
-    //FUNÇÃO RANGING, FAZ A CONVERSÃO DO TEMPO DE
-    //RESPOSTA DO ECHO EM CENTIMETROS, E ARMAZENA
-    //NA VARIAVEL "distancia"
-    distancia = (ultrasonic.Ranging(CM)); //VARIÁVEL GLOBAL RECEBE O VALOR DA DISTÂNCIA MEDIDA
-    result = String(distancia); //Converte o inteiro distância para string
-    delay(500);
- }
 
  void ativarSensor(int sensor) {
   //Função para ativar a porta do multiplexador que será lida
