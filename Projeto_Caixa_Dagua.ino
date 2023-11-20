@@ -17,8 +17,8 @@ EnergyMonitor SCT013;
 
 //===============================================
 // Dados do WiFi
-char ssid[] = "Wemos";
-char pass[] = "123456789";
+char ssid[] = "CEUNET - Bezerra_2G";
+char pass[] = "A24b27*9";
 
 BlynkTimer timer;
 //===============================================
@@ -36,6 +36,11 @@ int pinSCT = A0;
 
 //===============================================
 //Definição de Variáveis
+
+//Leds de  aviso
+#define led_conexao D5
+#define led_motor_ok D3
+#define led_motor_falha D4
 
 //Sensor de Corrente
 int tensao = 220;
@@ -128,6 +133,15 @@ void loop()
 {
   Blynk.run();
   timer.run();
+
+  //Acende o led se conectado ao Blynk e pisca se não conectado 
+  if(Blynk.connected() {
+    digitalWrite(led_conexao, HIGH);
+  }else {
+    digitalWrite(led_conexao, HIGH);
+    delay(100);
+    digitalWrite(led_conexao, LOW);
+  })
 
   //========================================================
   //Funcionamento do Sensor de Corrente
