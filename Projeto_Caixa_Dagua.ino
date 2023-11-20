@@ -17,30 +17,29 @@ EnergyMonitor SCT013;
 
 //===============================================
 // Dados do WiFi
-char ssid[] = "CEUNET - Bezerra_2G";
+char ssid[] = "CEUNET-Bezerra_2G";
 char pass[] = "A24b27*9";
 
 BlynkTimer timer;
 //===============================================
 
 //Mapeamento de hardware
-#define relay_Pin D2
-
-// #define S0 D4
-#define S2 D1
-// #define S2 D6 //Pinos de seleção do multiplexador
-
-// int pinSCT = A0;   //Pino analógico conectado ao SCT-013
-int portaSensores = A0; //Pino de entrada do multiplexador
-int pinSCT = A0;
-
-//===============================================
-//Definição de Variáveis
 
 //Leds de  aviso
 #define led_conexao D5
-#define led_motor_ok D3
-#define led_motor_falha D4
+#define led_bomba_ok D3
+#define led_bomba_falha D4
+
+#define relay_Pin D2
+
+#define S2 D1
+
+// int pinSCT = A0;   
+int portaSensores = A0; //Pino de entrada do multiplexador
+int pinSCT = A0;        //Pino analógico conectado ao SCT-013
+
+//===============================================
+//Definição de Variáveis
 
 //Sensor de Corrente
 int tensao = 220;
@@ -89,7 +88,6 @@ BLYNK_WRITE(V5)
   if(selecaoValue == 1){
     digitalWrite(relay_Pin, value);
   }
-
 }
 
 // This function is called every time the device is connected to the Blynk.Cloud
@@ -184,8 +182,10 @@ void loop()
   }
   if(falhaBomba == 0){
     Serial.println("Bomba OK!");
+    digitalWrite(led_bomba_ok, HIGH);
   } else {
     Serial.println("Falha na bomba...");
+    digitalWrite(led_bomba_falha, HIGH);
   }
 
   //========================================================
