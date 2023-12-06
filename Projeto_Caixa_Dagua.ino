@@ -17,7 +17,7 @@ EnergyMonitor SCT013;
 
 //===============================================
 // Dados do WiFi
-char ssid[] = "CEUNET-Bezerra_2G";
+char ssid[] = "CEUNET - Bezerra_2G";
 char pass[] = "A24b27*9";
 
 BlynkTimer timer;
@@ -83,11 +83,10 @@ BLYNK_WRITE(V5)
   // Atualiza o estado do V6
   if(value == 1){
     Blynk.virtualWrite(V6, 1); //Troca o acionamento da bomba para manual
+    selecaoValue = 1;
   }
-  //aciona o relé se a seleção estiver em manual (1)
-  if(selecaoValue == 1){
-    digitalWrite(relay_Pin, value);
-  }
+  //aciona o relé de acordo com o botão
+  digitalWrite(relay_Pin, value);
 }
 
 // This function is called every time the device is connected to the Blynk.Cloud
@@ -115,8 +114,11 @@ void setup()
   digitalWrite(relay_Pin, LOW);
 
   SCT013.current(pinSCT, 6.0606); //Reajusta a corrente máxima do sensor para 10A 
-  // pinMode(Sensor_Tensao, INPUT);
   pinMode(portaSensores, INPUT);
+
+  pinMode(led_conexao, OUTPUT);
+  pinMode(led_bomba_ok, OUTPUT);
+  pinMode(led_bomba_falha, OUTPUT);
 
   // Debug console
   Serial.begin(115200);
@@ -133,13 +135,13 @@ void loop()
   timer.run();
 
   //Acende o led se conectado ao Blynk e pisca se não conectado 
-  if(Blynk.connected() {
+  if(Blynk.connected()) {
     digitalWrite(led_conexao, HIGH);
   }else {
     digitalWrite(led_conexao, HIGH);
     delay(100);
     digitalWrite(led_conexao, LOW);
-  })
+  }
 
   //========================================================
   //Funcionamento do Sensor de Corrente
@@ -183,9 +185,11 @@ void loop()
   if(falhaBomba == 0){
     Serial.println("Bomba OK!");
     digitalWrite(led_bomba_ok, HIGH);
+    digitalWrite(led_bomba_falha, LOW);
   } else {
     Serial.println("Falha na bomba...");
     digitalWrite(led_bomba_falha, HIGH);
+    digitalWrite(led_bomba_ok, LOW);
   }
 
   //========================================================
