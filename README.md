@@ -4,10 +4,19 @@ Projeto com objetivo de criar um sistema de automação para controlar o nível 
 #Link de instalação da placa ESP8266:
   http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
+#Link de instalação da placa ESP32:
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+
 #Links para as bibliotecas: 
 
   Blynk => Digite "blynk" na aba de bibliotecas da IDE e selecione a primeira, criada por 'Volodymyr Shymanskyy'
 
   Ultrassonic.h => https://blogmasterwalkershop.com.br/arquivos/libs/Ultrasonic.zip
 
-  EmonLib.h => https://github.com/openenergymonitor/EmonLib  
+  EmonLib.h => https://github.com/openenergymonitor/EmonLib 
+
+  LiquidCrystal => https://github.com/fmalpartida/New-LiquidCrystal
+  
+  ZMPT101B => https://github.com/Abdurraziq/ZMPT101B-arduino
+ 
