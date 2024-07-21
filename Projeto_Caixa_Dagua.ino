@@ -1,49 +1,46 @@
-/* Inormações do Device fornecidas pelo Blynk */
+// Inormações do Dispositivo fornecidas pelo Blynk
 #define BLYNK_TEMPLATE_ID "TMPL2NAXG4qYq"
 #define BLYNK_TEMPLATE_NAME "Projeto Poço"
 #define BLYNK_AUTH_TOKEN "kCUgPuTvsh_1BHIlCsTYAjHvIP_zd_yk"
 
-/* Comment this out to disable prints and save space */
+// Comente esta linha para desabilitar os prints e economizar espaço
 #define BLYNK_PRINT Serial
 
 //===============================================
 //Inclusão de Bibliotecas
 
-#include <ESP8266WiFi.h>
-#include <BlynkSimpleEsp8266.h>
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include "EmonLib.h"
-EnergyMonitor SCT013;
 #include <ZMPT101B.h>
 
 //===============================================
 // Dados do WiFi
-// char ssid[] = "Wemos";
-// char pass[] = "123456789";
-char ssid[] = "CEUNET - Bezerra_2G";
-char pass[] = "A24b27*9";
+char ssid[] = "Wemos";
+char pass[] = "123456789";
+// char ssid[] = "CEUNET - Bezerra_2G";
+// char pass[] = "A24b27*9";
 
 BlynkTimer timer;
 //===============================================
-
 //Mapeamento de hardware
 
-//Leds de  aviso
-ZMPT101B Pin_Sensor_Tensao(A0, 50.0);
-#define S2 D1
-#define relay_Pin D2
-#define led_bomba_ok D3
-#define led_conexao D5
-#define SDA_Pin D6
-#define SCL_Pin D7
-#define led_bomba_falha D8
+#define Pin_Sensor_Tensao 34
+#define pinSCT 35
+#define led_conexao 2
+#define led_bomba_falha 18
+#define led_bomba_ok 19
+#define relay_Pin 23
+#define SDA_Pin 21
+#define SCL_Pin 22
 
-int pinSCT = A0;  //Pino analógico conectado ao SCT-013
+ZMPT101B SensorTensao(Pin_Sensor_Tensao, 50.0);  // Inicia o sensor de tensão
+EnergyMonitor SCT013;                            // Inicia o sensor de corrente
 
-// Cria endereço I2C do LCD e define tamanho
-#define LCD_endr 0x27
-LiquidCrystal_I2C lcd(LCD_endr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+#define LCD_endr 0x27                                               // Cria endereço I2C do LCD e define tamanho
+LiquidCrystal_I2C lcd(LCD_endr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Inicia o LCD
 
 //===============================================
 //Definição de Variáveis
@@ -54,8 +51,8 @@ int potencia;
 double Irms = 0;
 
 //controle da corrente da bomba
-int correnteMinima = 2;
-int correnteMaxima = 3;
+int correnteMinima = 4;
+int correnteMaxima = 5;
 
 //Sensor de Tensão
 float tensaoMedida = 0;
@@ -80,7 +77,7 @@ bool sistemaCorrompido = false;   // diz se o sistema está corrompido
 
 // Variáveis para o LCD
 String LCDMensagem = "";
-int LCDCorrente = 0;
+float LCDCorrente = 0;
 int LCDTensao = 0;
 
 //===============================================
@@ -110,7 +107,6 @@ BLYNK_WRITE(V5) {
   }
 }
 
-// This function is called every time the device is connected to the Blynk.Cloud
 //função chamada sempre que o dispositivo estiver conectado ao Blynk.Cloud
 BLYNK_CONNECTED() {
   // Change Web Link Button message to "Congratulations!"
@@ -131,20 +127,22 @@ void setup() {
   pinMode(relay_Pin, OUTPUT);
   digitalWrite(relay_Pin, LOW);
 
-  SCT013.current(pinSCT, 6.0606);  //Reajusta a corrente máxima do sensor para 10A
-  Pin_Sensor_Tensao.setSensitivity(1138);
-
+  pinMode(Pin_Sensor_Tensao, INPUT);
+  SCT013.current(pinSCT, 1.5);  // Current: input pin, calibration.
   pinMode(led_conexao, OUTPUT);
-  pinMode(S2, OUTPUT);
   pinMode(led_bomba_ok, OUTPUT);
   pinMode(led_bomba_falha, OUTPUT);
 
+  // SCT013.current(pinSCT, 6.0606);  //Reajusta a corrente máxima do sensor para 10A
+  SensorTensao.setSensitivity(1050);
+
   Wire.begin(SDA_Pin, SCL_Pin);  // Inicializa a comunicação I2C
 
+  LCDMensagem = "Iniciando...";
   lcd.begin(16, 2);
   lcd.setBacklight(HIGH);
   lcd.setCursor(0, 0);
-  LCDMensagem = "Iniciando...";
+  lcd.print(LCDMensagem);
 
   Serial.begin(115200);
 
@@ -152,12 +150,15 @@ void setup() {
 
   // Setup a function to be called every second
   timer.setInterval(1000L, myTimerEvent);
+  timer.setInterval(1000L, leituraSensores);
 }
 
 void loop() {
   Blynk.run();
   timer.run();
+}
 
+void leituraSensores() {
   //Impressão dos resultados no display LCD
   lcd.setBacklight(HIGH);
   lcd.clear();
@@ -167,13 +168,12 @@ void loop() {
   lcd.print(LCDTensao);
   lcd.print("V");
   lcd.setCursor(6, 1);
-  lcd.print(LCDCorrente);
+  lcd.print(String(LCDCorrente, 1));  //Mostra a varíável com apenas uma casa decimal
   lcd.print("A");
 
   //Acende o led se conectado ao Blynk e pisca se não conectado
   if (Blynk.connected()) {
     digitalWrite(led_conexao, HIGH);
-    // LCDMensagem = "";
     LCDMensagem = "Conectado!";
   } else {
     piscarLed(led_conexao, 500);
@@ -183,8 +183,6 @@ void loop() {
 
   //========================================================
   //Funcionamento do Sensor de Corrente
-  ativarSensor(1);
-
   Irms = SCT013.calcIrms(1480);  // Calcula o valor da Corrente 1172
 
   potencia = Irms * tensao;  // Calcula o valor da Potencia Instantanea
@@ -193,9 +191,7 @@ void loop() {
 
   //========================================================
   //Funcionamento do Sensor de Tensão
-  ativarSensor(2);
-
-  tensaoMedida = Pin_Sensor_Tensao.getRmsVoltage(20);
+  tensaoMedida = SensorTensao.getRmsVoltage(20);
 
   LCDTensao = tensaoMedida;
 
@@ -214,11 +210,11 @@ void loop() {
 
   } else if ((selecaoAutManValue == 0) && (sistemaCorrompido == 0)) {  //Se automático
     if (inicializacaoBomba == 0 && falhaBomba == 0) {
-      digitalWrite(relay_Pin, HIGH);
+      digitalWrite(relay_Pin, LOW);
       delay(tempoInicializacaoBomba);  //intervalo para ligar a bomba
       inicializacaoBomba = 1;          //armazena que a bomba foi inciada
     } else if ((inicializacaoBomba == 1) && (Irms <= correnteMinima || Irms >= correnteMaxima || tensaoMedida <= tensaoMinima)) {
-      digitalWrite(relay_Pin, LOW);
+      digitalWrite(relay_Pin, HIGH);
       falhaBomba = 1;  //ocorreu a falha
       inicioTempoFalha = millis();
       inicializacaoBomba = 0;
@@ -247,6 +243,7 @@ void loop() {
     digitalWrite(led_bomba_ok, HIGH);
     digitalWrite(led_bomba_falha, LOW);
   } else if (falhaBomba == 1 && sistemaCorrompido != 1) {
+  Serial.begin(115200);
     Serial.println("Falha na bomba...");
     digitalWrite(led_bomba_falha, HIGH);
     digitalWrite(led_bomba_ok, LOW);
@@ -272,20 +269,6 @@ void loop() {
   Serial.print(tensaoMedida);
   Serial.println(" V");
   Blynk.virtualWrite(V2, tensaoMedida);  //Envia a tensão para o aplicativo blynk
-}
-
-void ativarSensor(int sensor) {
-  //Função para ativar a porta do multiplexador que será lida
-  if (sensor == 1) {
-    Serial.println("Lendo o sensor de corrente.");
-    //Ativa o pino 1 (2Y1 ou C0)
-    analogWrite(S2, 0);
-  } else if (sensor == 2) {
-    Serial.println("Lendo o sensor de tensão.");
-    //Ativa o pino 2 (2Y0 ou C1)
-    analogWrite(S2, 255);
-  }
-  delay(30);  //intervalo de 30ms para troca da porta
 }
 
 void piscarLed(int set_led, int set_intervalo) {
