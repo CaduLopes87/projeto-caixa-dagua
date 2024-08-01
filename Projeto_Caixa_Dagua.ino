@@ -35,6 +35,8 @@ BlynkTimer timer;
 #define relay_Pin 23
 #define SDA_Pin 21
 #define SCL_Pin 22
+#define selecao_btn_Pin 4
+#define controle_btn_Pin 5
 
 ZMPT101B SensorTensao(Pin_Sensor_Tensao, 50.0);  // Inicia o sensor de tensão
 EnergyMonitor SCT013;                            // Inicia o sensor de corrente
@@ -51,8 +53,8 @@ int potencia;
 double Irms = 0;
 
 //controle da corrente da bomba
-int correnteMinima = 4;
-int correnteMaxima = 5;
+float correnteMinima = 2.0;
+float correnteMaxima = 3.5;
 
 //Sensor de Tensão
 float tensaoMedida = 0;
@@ -61,11 +63,12 @@ float tensaoMedida = 0;
 int tensaoMinima = 200;
 
 //Controle do Blynk
-bool selecaoAutManValue = 0;  // 0 -> automática e 1 -> manual
-bool estadoChaveSelecao = 1;
+bool selecaoAutManValue = 1;  // 0 -> automática e 1 -> manual
+bool releValue = 0;           // Recupera o valor do blynk para o Rele
 
 //Controle da bomba e de falha da bomba
-bool inicializacaoBomba = 0;         //desativada no início
+bool acionarBomba = false;           //Variável para controlar manualmente o relé
+bool inicializacaoBomba = 0;         //desativada no início - verifica se foi iniciada
 int tempoInicializacaoBomba = 2000;  // dois segundos para iniciar
 
 bool falhaBomba = 0;
@@ -79,31 +82,49 @@ bool sistemaCorrompido = false;   // diz se o sistema está corrompido
 String LCDMensagem = "";
 float LCDCorrente = 0;
 int LCDTensao = 0;
+String LCDselecaoAM = "";
 
 //===============================================
 //Funções de controle do Blynk
 
+BLYNK_WRITE(V0) {
+  correnteMinima = param.asFloat();
+}
+
+BLYNK_WRITE(V3) {
+  correnteMaxima = param.asFloat();
+}
+
+BLYNK_WRITE(V7) {
+  tensaoMinima = param.asInt();
+}
+
 BLYNK_WRITE(V6) {
-  //recebe o valor do blynk
   selecaoAutManValue = param.asInt();
   // Atualiza o estado do V5
-  if (selecaoAutManValue == 0) {  //Se automático
-    Blynk.virtualWrite(V5, 0);    //passível de retirar
+  if (selecaoAutManValue == 0) {
+    //Se automático
+    Blynk.virtualWrite(V5, 0);
+    acionarBomba = false;
+    LCDselecaoAM = "A";
+  } else {
+    LCDselecaoAM = "M";
   }
 }
 
 BLYNK_WRITE(V5) {
   //recebe o valor do blynk
-  int ReleValue = param.asInt();
+  releValue = param.asInt();
   // Atualiza o estado do V6
-  if (ReleValue == 1) {
+  if (releValue == 1) {
     Blynk.virtualWrite(V6, 1);  //Troca o acionamento da bomba para manual
     selecaoAutManValue = 1;
   }
 
   if (selecaoAutManValue == 1) {
     //aciona o relé de acordo com o botão se está em manual
-    digitalWrite(relay_Pin, ReleValue);
+    // digitalWrite(relay_Pin, ReleValue);
+    acionarBomba = releValue;
   }
 }
 
@@ -133,7 +154,9 @@ void setup() {
   pinMode(led_bomba_ok, OUTPUT);
   pinMode(led_bomba_falha, OUTPUT);
 
-  // SCT013.current(pinSCT, 6.0606);  //Reajusta a corrente máxima do sensor para 10A
+  pinMode(selecao_btn_Pin, INPUT);
+  pinMode(controle_btn_Pin, INPUT);
+
   SensorTensao.setSensitivity(1050);
 
   Wire.begin(SDA_Pin, SCL_Pin);  // Inicializa a comunicação I2C
@@ -159,6 +182,14 @@ void loop() {
 }
 
 void leituraSensores() {
+  lerBotoes();
+
+  Serial.print("Corrente máxima: ");
+  Serial.println(correnteMaxima);
+  Serial.print("Corrente mínima: ");
+  Serial.println(correnteMinima);
+  Serial.print("Tensão mínima: ");
+  Serial.println(tensaoMinima);
   //Impressão dos resultados no display LCD
   lcd.setBacklight(HIGH);
   lcd.clear();
@@ -170,6 +201,8 @@ void leituraSensores() {
   lcd.setCursor(6, 1);
   lcd.print(String(LCDCorrente, 1));  //Mostra a varíável com apenas uma casa decimal
   lcd.print("A");
+  lcd.setCursor(12, 1);
+  lcd.print(LCDselecaoAM);
 
   //Acende o led se conectado ao Blynk e pisca se não conectado
   if (Blynk.connected()) {
@@ -205,10 +238,11 @@ void leituraSensores() {
     sistemaCorrompido = 0;
     inicializacaoBomba = 0;
     tentativasInicializacao = 0;
+    digitalWrite(relay_Pin, acionarBomba);
     digitalWrite(led_bomba_ok, HIGH);
     digitalWrite(led_bomba_falha, HIGH);
 
-  } else if ((selecaoAutManValue == 0) && (sistemaCorrompido == 0)) {  //Se automático
+  } else if ((selecaoAutManValue == 0) && (sistemaCorrompido == 0)) {  //Se automático e não corrompido
     if (inicializacaoBomba == 0 && falhaBomba == 0) {
       digitalWrite(relay_Pin, LOW);
       delay(tempoInicializacaoBomba);  //intervalo para ligar a bomba
@@ -238,12 +272,12 @@ void leituraSensores() {
     }
   }
 
-  if (falhaBomba == 0) {
+  if (falhaBomba == 0 && selecaoAutManValue == 0) {
     Serial.println("Bomba OK!");
     digitalWrite(led_bomba_ok, HIGH);
     digitalWrite(led_bomba_falha, LOW);
   } else if (falhaBomba == 1 && sistemaCorrompido != 1) {
-  Serial.begin(115200);
+    Serial.begin(115200);
     Serial.println("Falha na bomba...");
     digitalWrite(led_bomba_falha, HIGH);
     digitalWrite(led_bomba_ok, LOW);
@@ -276,4 +310,53 @@ void piscarLed(int set_led, int set_intervalo) {
   delay(set_intervalo);
   digitalWrite(set_led, LOW);
   delay((set_intervalo / 10));
+}
+
+void lerBotoes() {
+  int botaoSelecao = digitalRead(selecao_btn_Pin);
+  int botaoControle = digitalRead(controle_btn_Pin);
+
+  Serial.println();
+  Serial.println();
+  Serial.println();
+  Serial.println();
+  Serial.print("BOTÃO SELEÇÃO: ");
+  Serial.println(botaoSelecao);
+  Serial.print("BOTÃO CONTROLE: ");
+  Serial.println(botaoControle);
+
+  if (botaoSelecao == 1) {
+    selecaoAutManValue = inverterValorBooleano(selecaoAutManValue);
+
+    Blynk.virtualWrite(V6, selecaoAutManValue);
+    Serial.print("ESTADO SELEÇÃO: ");
+    Serial.println(selecaoAutManValue);
+    Serial.println();
+    Serial.println();
+    Serial.println();
+  }
+
+  if (botaoControle == 1) {
+    acionarBomba = inverterValorBooleano(acionarBomba);
+
+    Serial.print("ACIONAR BOMBA: ");
+    Serial.println(acionarBomba);
+    releValue = acionarBomba;
+    Blynk.virtualWrite(V5, acionarBomba);
+  }
+}
+
+void acionarReleManualmente() {
+}
+
+bool inverterValorBooleano(bool valor) {
+  bool valorAInverter = valor;
+
+  if (valorAInverter == true) {
+    valorAInverter = false;
+  } else {
+    valorAInverter = true;
+  }
+
+  return valorAInverter;
 }
