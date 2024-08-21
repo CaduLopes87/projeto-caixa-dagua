@@ -47,6 +47,9 @@ LiquidCrystal_I2C lcd(LCD_endr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Inicia o 
 //===============================================
 //Definição de Variáveis
 
+//Armazena estado de conexão com o blynk
+bool blynkConectado;
+
 //Sensor de Corrente
 int tensao = 220;
 int potencia;
@@ -78,11 +81,15 @@ unsigned long intervaloCorrecaoErro = 10000;  //10s
 int tentativasInicializacao = 0;  // armazena a quantidade de tentativas de inicialização da bomba após o erro
 bool sistemaCorrompido = false;   // diz se o sistema está corrompido
 
+//Controle de estado dos botões físicos
+bool botaoSelecaoPressionado = false;
+bool botaoControlePressionado = false;
+
 // Variáveis para o LCD
 String LCDMensagem = "";
 float LCDCorrente = 0;
 int LCDTensao = 0;
-String LCDselecaoAM = "";
+String LCDselecaoAM = "M";
 
 //===============================================
 //Funções de controle do Blynk
@@ -106,24 +113,15 @@ BLYNK_WRITE(V6) {
     //Se automático
     Blynk.virtualWrite(V5, 0);
     acionarBomba = false;
-    LCDselecaoAM = "A";
-  } else {
-    LCDselecaoAM = "M";
   }
 }
 
 BLYNK_WRITE(V5) {
   //recebe o valor do blynk
   releValue = param.asInt();
-  // Atualiza o estado do V6
-  if (releValue == 1) {
-    Blynk.virtualWrite(V6, 1);  //Troca o acionamento da bomba para manual
-    selecaoAutManValue = 1;
-  }
 
   if (selecaoAutManValue == 1) {
     //aciona o relé de acordo com o botão se está em manual
-    // digitalWrite(relay_Pin, ReleValue);
     acionarBomba = releValue;
   }
 }
@@ -137,13 +135,14 @@ BLYNK_CONNECTED() {
 }
 
 // This function sends Arduino's uptime every second to Virtual Pin 2.
-void myTimerEvent() {
-  // You can send any value at any time.
-  // Please don't send more that 10 values per second.
-  Blynk.virtualWrite(V4, millis() / 800);
-}
+// void myTimerEvent() {
+//   // You can send any value at any time.
+//   // Please don't send more that 10 values per second.
+//   Blynk.virtualWrite(V4, millis() / 800);
+// }
 
 void setup() {
+
   //Definindo portas
   pinMode(relay_Pin, OUTPUT);
   digitalWrite(relay_Pin, LOW);
@@ -154,8 +153,12 @@ void setup() {
   pinMode(led_bomba_ok, OUTPUT);
   pinMode(led_bomba_falha, OUTPUT);
 
-  pinMode(selecao_btn_Pin, INPUT);
-  pinMode(controle_btn_Pin, INPUT);
+  pinMode(selecao_btn_Pin, INPUT_PULLDOWN);
+  pinMode(controle_btn_Pin, INPUT_PULLDOWN);
+
+  //Configura interrupções para os botões físicos
+  attachInterrupt(selecao_btn_Pin, lerSelecaoBtnPressionado, RISING);
+  attachInterrupt(controle_btn_Pin, lerControleBtnPressionado, RISING);
 
   SensorTensao.setSensitivity(1050);
 
@@ -169,27 +172,65 @@ void setup() {
 
   Serial.begin(115200);
 
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  //Configura WiFi e Blynk
+  WiFi.begin(ssid, pass);
+  Blynk.config(BLYNK_AUTH_TOKEN);
 
   // Setup a function to be called every second
-  timer.setInterval(1000L, myTimerEvent);
-  timer.setInterval(1000L, leituraSensores);
+  // timer.setInterval(1000L, myTimerEvent);
+  timer.setInterval(300L, leituraSensores);
 }
 
 void loop() {
-  Blynk.run();
-  timer.run();
+  //ADICIONAR LÓGICA DE TEMPO PARA REINICIAR VARIÁVEL DE SISTEMA CORROMPIDO
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Blynk.run();
+    timer.run();
+
+    if (Blynk.connected()) {
+      if (blynkConectado == false) {
+        //Sincroniza os valores do Blynk
+        Blynk.syncVirtual(V0);
+        Blynk.syncVirtual(V3);
+        Blynk.syncVirtual(V7);
+        //ENIVAR ESTADO DE SELEÇÃO E CONTROLE PRO BLYNK QUANDO CONECTA
+        blynkConectado = true;
+      }
+    }
+    digitalWrite(led_conexao, HIGH);
+  } else {
+    leituraSensores();
+    blynkConectado = false;
+    piscarLed(led_conexao, 100);
+  }
 }
 
 void leituraSensores() {
-  lerBotoes();
+  //Acende o led se conectado ao Blynk e pisca se não conectado
 
-  Serial.print("Corrente máxima: ");
-  Serial.println(correnteMaxima);
-  Serial.print("Corrente mínima: ");
-  Serial.println(correnteMinima);
-  Serial.print("Tensão mínima: ");
-  Serial.println(tensaoMinima);
+  //Verifica se algum botão foi pressionado
+  if (botaoSelecaoPressionado == true) {
+    botaoSelecaoPressionado = false;
+    selecaoAutManValue = !selecaoAutManValue;
+    acionarBomba = selecaoAutManValue == 0 ? false : acionarBomba;  //Defini como falso se botão mudou pra automático
+    if (blynkConectado == true) {
+      Blynk.virtualWrite(V6, selecaoAutManValue);
+    }
+  }
+
+  if (botaoControlePressionado == true) {
+    botaoControlePressionado = false;  //Reinicia estado do botão
+    acionarBomba = !acionarBomba;
+    releValue = acionarBomba;
+    if (blynkConectado == true) {
+      Blynk.virtualWrite(V5, releValue);
+    }
+  }
+
+  //Atualiza estado do botão de seleção no display
+  LCDselecaoAM = selecaoAutManValue == 0 ? "A" : "M";
+
   //Impressão dos resultados no display LCD
   lcd.setBacklight(HIGH);
   lcd.clear();
@@ -201,18 +242,8 @@ void leituraSensores() {
   lcd.setCursor(6, 1);
   lcd.print(String(LCDCorrente, 1));  //Mostra a varíável com apenas uma casa decimal
   lcd.print("A");
-  lcd.setCursor(12, 1);
+  lcd.setCursor(15, 1);
   lcd.print(LCDselecaoAM);
-
-  //Acende o led se conectado ao Blynk e pisca se não conectado
-  if (Blynk.connected()) {
-    digitalWrite(led_conexao, HIGH);
-    LCDMensagem = "Conectado!";
-  } else {
-    piscarLed(led_conexao, 500);
-    LCDMensagem = "";
-    LCDMensagem = "Desconectado!";
-  }
 
   //========================================================
   //Funcionamento do Sensor de Corrente
@@ -228,10 +259,8 @@ void leituraSensores() {
 
   LCDTensao = tensaoMedida;
 
-  Serial.print("Tensão lida: ");
-  Serial.println(tensaoMedida);
-
   //========================================================
+
   //Tratamento dos dados para acionar a bomba
   if (selecaoAutManValue == 1) {  //Se manual
     falhaBomba = 0;
@@ -243,15 +272,24 @@ void leituraSensores() {
     digitalWrite(led_bomba_falha, HIGH);
 
   } else if ((selecaoAutManValue == 0) && (sistemaCorrompido == 0)) {  //Se automático e não corrompido
+    //Sistema ainda não foi ligado
     if (inicializacaoBomba == 0 && falhaBomba == 0) {
       digitalWrite(relay_Pin, LOW);
       delay(tempoInicializacaoBomba);  //intervalo para ligar a bomba
-      inicializacaoBomba = 1;          //armazena que a bomba foi inciada
+      inicializacaoBomba = 1;          //armazena status que a bomba foi ativada
+
+      //Sistema está lligado e dentro dos parâmetros
+    } else if ((inicializacaoBomba == 1) && (Irms >= correnteMinima && Irms <= correnteMaxima && tensaoMedida >= tensaoMinima)) {
+      digitalWrite(relay_Pin, LOW);
+      inicializacaoBomba = 1;  //armazena status que a bomba foi ativada
+      tentativasInicializacao = 0;
+
+      //Sistema está ligado e fora dos parâmetros
     } else if ((inicializacaoBomba == 1) && (Irms <= correnteMinima || Irms >= correnteMaxima || tensaoMedida <= tensaoMinima)) {
       digitalWrite(relay_Pin, HIGH);
       falhaBomba = 1;  //ocorreu a falha
       inicioTempoFalha = millis();
-      inicializacaoBomba = 0;
+      inicializacaoBomba = 0;  //armazena status que a bomba foi desativada
     }
 
     if ((falhaBomba == 1) && (sistemaCorrompido == 0)) {
@@ -272,21 +310,22 @@ void leituraSensores() {
     }
   }
 
+  //Mostra mensagem de conexão no display
+  LCDMensagem = blynkConectado == true ? "Conectado!" : "Desconectado!";
+
   if (falhaBomba == 0 && selecaoAutManValue == 0) {
     Serial.println("Bomba OK!");
     digitalWrite(led_bomba_ok, HIGH);
     digitalWrite(led_bomba_falha, LOW);
   } else if (falhaBomba == 1 && sistemaCorrompido != 1) {
-    Serial.begin(115200);
     Serial.println("Falha na bomba...");
     digitalWrite(led_bomba_falha, HIGH);
     digitalWrite(led_bomba_ok, LOW);
   } else if (sistemaCorrompido == 1) {
-    Serial.println("Sistema Corrmpido!!!!");
+    Serial.println("Sistema Corrompido!!!!");
     digitalWrite(led_bomba_ok, LOW);
     piscarLed(led_bomba_falha, 500);
-    LCDMensagem = "";
-    LCDMensagem = "Sistema em Falha";
+    LCDMensagem = blynkConectado == true ? "Sistema em Falha" : "Desc. e Corromp.";
   }
 
   //========================================================
@@ -294,7 +333,6 @@ void leituraSensores() {
   Serial.print("Corrente = ");
   Serial.print(Irms);
   Serial.println(" A");
-  Blynk.virtualWrite(V1, Irms);  //Envia a corrente para o aplicativo blynk
   Serial.print("Potencia = ");
   Serial.print(potencia);
   Serial.println(" W");
@@ -302,7 +340,12 @@ void leituraSensores() {
   Serial.print("Tensão = ");
   Serial.print(tensaoMedida);
   Serial.println(" V");
-  Blynk.virtualWrite(V2, tensaoMedida);  //Envia a tensão para o aplicativo blynk
+
+  //Sincroniza se o blynk está conectado
+  if (blynkConectado == true) {
+    Blynk.virtualWrite(V1, Irms);          //Envia a corrente para o aplicativo blynk
+    Blynk.virtualWrite(V2, tensaoMedida);  //Envia a tensão para o aplicativo blynk
+  }
 }
 
 void piscarLed(int set_led, int set_intervalo) {
@@ -312,51 +355,10 @@ void piscarLed(int set_led, int set_intervalo) {
   delay((set_intervalo / 10));
 }
 
-void lerBotoes() {
-  int botaoSelecao = digitalRead(selecao_btn_Pin);
-  int botaoControle = digitalRead(controle_btn_Pin);
-
-  Serial.println();
-  Serial.println();
-  Serial.println();
-  Serial.println();
-  Serial.print("BOTÃO SELEÇÃO: ");
-  Serial.println(botaoSelecao);
-  Serial.print("BOTÃO CONTROLE: ");
-  Serial.println(botaoControle);
-
-  if (botaoSelecao == 1) {
-    selecaoAutManValue = inverterValorBooleano(selecaoAutManValue);
-
-    Blynk.virtualWrite(V6, selecaoAutManValue);
-    Serial.print("ESTADO SELEÇÃO: ");
-    Serial.println(selecaoAutManValue);
-    Serial.println();
-    Serial.println();
-    Serial.println();
-  }
-
-  if (botaoControle == 1) {
-    acionarBomba = inverterValorBooleano(acionarBomba);
-
-    Serial.print("ACIONAR BOMBA: ");
-    Serial.println(acionarBomba);
-    releValue = acionarBomba;
-    Blynk.virtualWrite(V5, acionarBomba);
-  }
+void lerSelecaoBtnPressionado() {
+  botaoSelecaoPressionado = true;
 }
 
-void acionarReleManualmente() {
-}
-
-bool inverterValorBooleano(bool valor) {
-  bool valorAInverter = valor;
-
-  if (valorAInverter == true) {
-    valorAInverter = false;
-  } else {
-    valorAInverter = true;
-  }
-
-  return valorAInverter;
+void lerControleBtnPressionado() {
+  botaoControlePressionado = true;
 }
